@@ -14,7 +14,7 @@ from src.funs import segments, splitlines, kdnearest
 if where == 'home':
     ROOTDIR = Path('c:/git_repos/impax')
 else:
-    ROOTDIR = Path('d:/git_repos/impax')
+    ROOTDIR = Path('d:/git_repos/boud')
 
 # open file which will hold the distance data
 template = rxr.open_rasterio(ROOTDIR / 'data/gwa3/AUT_combined-Weibull-A_100.tif')
@@ -23,20 +23,23 @@ template = rxr.open_rasterio(ROOTDIR / 'data/gwa3/AUT_combined-Weibull-A_100.tif
 template = template.rio.reproject('EPSG:3416').squeeze()
 template_stacked = template.stack(xy=['x', 'y'])
 
-austria = gpd.read_file(ROOTDIR / 'data/Staatsgrenze/Staatsgebiet_50.shp')
+austria = gpd.read_file(ROOTDIR / 'data/vgd/VGD.shp')
+austria = austria.dissolve(by='ST')
+austria = austria.to_crs(template.rio.crs)
 
-lines = pd.read_csv(ROOTDIR / 'data/gridkit_europe/gridkit_europe-highvoltage-links.csv')
+lines = pd.read_csv(ROOTDIR / 'data/grid/gridkit_europe-highvoltage-links.csv')
 lines['geometry'] = lines['wkt_srid_4326'].str.replace('SRID=4326;', '')
 lines['geometry'] = lines['geometry'].apply(wkt.loads)
 lines = gpd.GeoDataFrame(lines, crs='epsg:4326')
+lines = lines.to_crs(template.rio.crs)
 lines = gpd.clip(lines, austria)
 lines = lines.explode()
-lines = lines.to_crs('epsg:3416')
+
 
 # split lines
 lines = splitlines(lines, 64)
 
-clc = gpd.read_file(ROOTDIR / 'data/CLC_2018_AT_clip/CLC18_AT_clip.shp')
+clc = gpd.read_file(ROOTDIR / 'data/clc/CLC18_AT_clip.shp')
 clc['CODE_18'] = clc['CODE_18'].astype('int')
 settle = clc[clc['CODE_18'] <= 121]
 settlement = settle.boundary.explode()

@@ -13,7 +13,7 @@ from src.funs import distance_2d, sliced_location_optimization, locations_to_gdf
 import matplotlib.pyplot as plt
 
 # %%
-ROOTDIR = Path('c:/git_repos/impax')
+ROOTDIR = Path('d:/git_repos/boud')
 
 gams_dict = {
     'gams_model': ROOTDIR / 'opt/location_selection.gms',
@@ -24,24 +24,24 @@ gams_dict = {
 
 # %% read data
 # read state borders
-vgd = gpd.read_file(ROOTDIR / 'data/VGD_Oesterreich_gen_50_20211001/VGD_50_generalisiert.shp')
+vgd = gpd.read_file(ROOTDIR / 'data/vgd/VGD.shp')
 states = vgd[['BL', 'geometry']].dissolve(by='BL')
 states.reset_index(inplace=True)
 
-clc = gpd.read_file(ROOTDIR / 'data/CLC_2018_AT_clip/CLC18_AT_clip.shp')
+clc = gpd.read_file(ROOTDIR / 'data/clc/CLC18_AT_clip.shp')
 clc['CODE_18'] = clc['CODE_18'].astype('int')
 clc = clc[clc['CODE_18'] <= 121]
 clc = clc.to_crs(states.crs)
 clc = clc.buffer(500)
 
-noe = gpd.read_file(ROOTDIR / 'data/RRU_WIND_ZONEN_P19/RRU_WIND_ZONEN_P19Polygon.shp')
+noe = gpd.read_file(ROOTDIR / 'data/zones/RRU_WIND_ZONEN_P19Polygon.shp')
 noe = noe.to_crs(clc.crs)
 
-bgld = gpd.read_file(ROOTDIR / 'data/widmungsflaechen/BGLD_FLAECHENWIDMUNG.shp')
+bgld = gpd.read_file(ROOTDIR / 'data/zones/BGLD_FLAECHENWIDMUNG.shp')
 bgld = bgld.loc[bgld['BEZEICH'] == 'Windkraftanlage', 'geometry']
 bgld = bgld.to_crs(clc.crs)
 
-stmk = gpd.read_file(ROOTDIR / 'data/SAPRO_Windenergie_zone/SAPRO_Windenergie_zone.shp')
+stmk = gpd.read_file(ROOTDIR / 'data/zones/SAPRO_Windenergie_zone.shp')
 stmk = stmk.loc[stmk['Zone'] == 'Vorrang', 'geometry']
 stmk = stmk.to_crs(clc.crs)
 
@@ -50,7 +50,7 @@ stmk = stmk.to_crs(clc.crs)
 # zones = zones.append(bgld.loc[bgld['BEZEICH'] == 'Windkraftanlage', 'geometry'])
 # zones = zones.reset_index(drop=True)
 
-lcoe = xr.open_dataarray(ROOTDIR / 'data/results/lcoe_nogridcost.nc', mask_and_scale=True)
+lcoe = xr.open_dataarray(ROOTDIR / 'data/results/lcoe.nc', mask_and_scale=True)
 lcoe = lcoe.min(dim='turbine_models')
 lcoe = lcoe.rio.reproject(clc.crs)
 clipped = lcoe.rio.clip(clc.geometry, clc.crs, drop=False, invert=True)

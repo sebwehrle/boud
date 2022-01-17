@@ -1,3 +1,5 @@
+# %% imports
+import os
 from pathlib import Path
 import pandas as pd
 import xarray as xr
@@ -18,7 +20,7 @@ lifetime = 25
 if where == 'home':
     ROOTDIR = Path('c:/git_repos/impax')
 else:
-    ROOTDIR = Path('d:/git_repos/impax')
+    ROOTDIR = Path('d:/git_repos/boud')
 
 # %% read capacity factors
 cf = xr.open_dataarray(ROOTDIR / 'data/preprocessed/capacity_factors.nc')
@@ -48,4 +50,8 @@ for key, value in turbines.items():
         pass
 
 lcoe = xr.concat(LCOE, dim='turbine_models')
-lcoe.to_netcdf(ROOTDIR / 'data/results/lcoe.nc')
+
+dir_results = ROOTDIR / 'data/results'
+if not os.path.exists(dir_results):
+    os.mkdir(dir_results)
+lcoe.to_netcdf(dir_results / 'lcoe.nc')

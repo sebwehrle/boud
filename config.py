@@ -1,5 +1,5 @@
 # global settings
-where = 'home'
+where = 'office'
 
 # turbines to consider
 turbines = {

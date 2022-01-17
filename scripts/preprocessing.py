@@ -1,8 +1,8 @@
 # %% imports
+import os
 from pathlib import Path
 import numpy as np
 import pandas as pd
-# import xarray as xr
 import rioxarray as rxr
 from scipy.special import gamma
 from scipy.interpolate import interp1d
@@ -14,21 +14,19 @@ from config import where, turbines
 if where == 'home':
     ROOTDIR = Path('c:/git_repos/impax')
 else:
-    ROOTDIR = Path('d:/git_repos/impax')
+    ROOTDIR = Path('d:/git_repos/boud')
 
 # %% turbine power curves
 # read turbine power curves
 # renewables ninja
-rnj_power_curves = pd.read_csv(ROOTDIR / 'data/powercurves/rnj/Wind Turbine Power Curves ~ 5 (0.01ms with 0.00 w smoother).csv')
+rnj_power_curves = pd.read_csv(ROOTDIR / 'data/power_curves/rnj_power_curve_000-smooth.csv')
 # open energy platform --
-oep_power_curves = pd.read_csv(ROOTDIR / 'data/powercurves/oep/supply__wind_turbine_library.csv')
+oep_power_curves = pd.read_csv(ROOTDIR / 'data/power_curves/supply__wind_turbine_library.csv')
 oep_power_curves['type_string'] = oep_power_curves['manufacturer'] + '.' + oep_power_curves['turbine_type'].replace({'/': '.', '-': ''}, regex=True)
 oep_power_curves.dropna(subset=['power_curve_values'], inplace=True)
 # nrel
-nrel_power_curves = pd.read_csv(ROOTDIR / 'data/powercurves/nrel/SAM_Wind Turbines.csv', header=[0, 1, 2])
+nrel_power_curves = pd.read_csv(ROOTDIR / 'data/power_curves/sam_wind_turbines.csv', header=[0, 1, 2])
 nrel_power_curves['Wind Speed Array'].replace('|', ',')
-# own research
-own_power_curves = pd.read_excel(ROOTDIR / 'data/powercurves/seb/enercon_power_curves.xlsx')
 
 # process power curves
 u_pwrcrv = np.linspace(0.5, 30, num=60)  # np.linspace(0, 30, num=61)
@@ -37,10 +35,7 @@ powercurves = pd.DataFrame(index=u_pwrcrv)
 #for n in oep_power_curves.index:
 missing_turbs = []
 for turbine, _ in turbines.items():
-    if turbine in own_power_curves.columns:
-        f_itpl = interp1d(own_power_curves['speed'], own_power_curves[turbine], kind='linear')
-        powercurves[turbine] = f_itpl(u_pwrcrv)
-    elif oep_power_curves['type_string'].str.contains(turbine).any():
+    if oep_power_curves['type_string'].str.contains(turbine).any():
         sel = oep_power_curves['type_string'].str.contains(turbine)
         n = oep_power_curves[sel].index[0]
         f_itpl = interp1d(literal_eval(oep_power_curves.loc[n, 'power_curve_wind_speeds']),
@@ -53,6 +48,10 @@ for turbine, _ in turbines.items():
     else:
         missing_turbs.append(turbine)
 powercurves.index.name = 'speed'
+
+if not os.path.exists(ROOTDIR / 'data/preprocessed'):
+    os.mkdir(ROOTDIR / 'data/preprocessed')
+
 powercurves.to_csv(ROOTDIR / 'data/preprocessed/powercurves.csv', sep=';', decimal=',')
 
 # %% compute air density correction factor from elevation data
