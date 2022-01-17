@@ -1,10 +1,7 @@
 # %% imports
-from pathlib import Path
-import numpy as np
 import pandas as pd
 import rioxarray as rxr
 import xarray as xr
-import matplotlib.pyplot as plt
 
 from config import ROOTDIR, turbines
 from src.funs import weibull_probability_density, capacity_factor
