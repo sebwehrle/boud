@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 ROOTDIR = Path('c:/git_repos/impax')
 
 gams_dict = {
-    'gams_model': ROOTDIR / 'opt/location_selection_gwa.gms',
+    'gams_model': ROOTDIR / 'opt/location_selection.gms',
     'gdx_input': ROOTDIR / 'opt/input_data.gdx',
     'gdx_output': ROOTDIR / 'opt',
     'gams_exe': Path('c:/myprogs/gams/37')
