@@ -12,13 +12,14 @@ from src.funs import segments, splitlines, kdnearest
 
 # %% read data
 if where == 'home':
-    ROOTDIR = Path('/')
+    ROOTDIR = Path('c:/git_repos/impax')
 else:
     ROOTDIR = Path('d:/git_repos/impax')
 
 # open file which will hold the distance data
-template = rxr.open_rasterio(ROOTDIR / 'data/windatlas/a120_100m_Lambert.img')
-template.values[template.values <= 0] = np.nan
+template = rxr.open_rasterio(ROOTDIR / 'data/gwa3/AUT_combined-Weibull-A_100.tif')
+# template.values[template.values <= 0] = np.nan
+# template = template.shift(x=4, y=-1)
 template = template.rio.reproject('EPSG:3416').squeeze()
 template_stacked = template.stack(xy=['x', 'y'])
 

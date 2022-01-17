@@ -2,8 +2,9 @@
 from pathlib import Path
 import numpy as np
 import pandas as pd
-import xarray as xr
+# import xarray as xr
 import rioxarray as rxr
+from scipy.special import gamma
 from scipy.interpolate import interp1d
 from ast import literal_eval
 
@@ -11,7 +12,7 @@ from config import where, turbines
 
 # %% global settings
 if where == 'home':
-    ROOTDIR = Path('/')
+    ROOTDIR = Path('c:/git_repos/impax')
 else:
     ROOTDIR = Path('d:/git_repos/impax')
 
@@ -19,7 +20,7 @@ else:
 # read turbine power curves
 # renewables ninja
 rnj_power_curves = pd.read_csv(ROOTDIR / 'data/powercurves/rnj/Wind Turbine Power Curves ~ 5 (0.01ms with 0.00 w smoother).csv')
-# open energy platform -- https://openenergy-platform.org/dataedit/view/supply/wind_turbine_library
+# open energy platform --
 oep_power_curves = pd.read_csv(ROOTDIR / 'data/powercurves/oep/supply__wind_turbine_library.csv')
 oep_power_curves['type_string'] = oep_power_curves['manufacturer'] + '.' + oep_power_curves['turbine_type'].replace({'/': '.', '-': ''}, regex=True)
 oep_power_curves.dropna(subset=['power_curve_values'], inplace=True)
@@ -30,7 +31,7 @@ nrel_power_curves['Wind Speed Array'].replace('|', ',')
 own_power_curves = pd.read_excel(ROOTDIR / 'data/powercurves/seb/enercon_power_curves.xlsx')
 
 # process power curves
-u_pwrcrv = np.linspace(0, 30, num=61)
+u_pwrcrv = np.linspace(0.5, 30, num=60)  # np.linspace(0, 30, num=61)
 powercurves = pd.DataFrame(index=u_pwrcrv)
 
 #for n in oep_power_curves.index:
@@ -55,35 +56,27 @@ powercurves.index.name = 'speed'
 powercurves.to_csv(ROOTDIR / 'data/preprocessed/powercurves.csv', sep=';', decimal=',')
 
 # %% compute air density correction factor from elevation data
-A100 = rxr.open_rasterio(ROOTDIR / 'data/windatlas/a120_100m_Lambert.img')
-A100 = A100.rio.reproject('EPSG:3416').squeeze()
-
-elevation_10m = rxr.open_rasterio(ROOTDIR / 'data/elevation/dhm_at_lamb_10m_2018.tif')
-elevation_10m = elevation_10m.rio.reproject('epsg:3416').squeeze()
-elevation = elevation_10m.interp_like(A100, method='linear')
-elevation.values[elevation.values < -10**3] = np.nan
+elevation = rxr.open_rasterio(ROOTDIR / 'data/gwa3/AUT_elevation_w_bathymetry.tif')
 
 # compute air density correction
 # see https://wind-data.ch/tools/luftdichte.php
 rho_correction = 1.247015 * np.exp(-0.000104 * elevation) / 1.225
-rho_correction.to_netcdf(path=ROOTDIR / 'data/preprocessed/air_density.nc')
-
+rho_correction.to_netcdf(path=ROOTDIR / 'data/preprocessed/gwa_air_density.nc')
 
 # %% compute roughness factor alpha
-# read mean wind speeds from Austrian wind atlas
-u50 = rxr.open_rasterio(ROOTDIR / 'data/AUT_Wind/v50/w001001x.adf')
-u50 = u50.squeeze()
-u50.values[u50.values < 0] = np.nan
-u50 = u50.rio.reproject('epsg:3416')
-u50.values = u50.values / 1000
+# read Weibull parameters at different heights
+a50 = rxr.open_rasterio(ROOTDIR / 'data/gwa3/AUT_combined-Weibull-A_50.tif')
+k50 = rxr.open_rasterio(ROOTDIR / 'data/gwa3/AUT_combined-Weibull-k_50.tif')
+u_mean_50 = a50 * gamma(1 / k50 + 1)
 
-u100 = rxr.open_rasterio(ROOTDIR / 'data/AUT_Wind/v100/w001001x.adf')
-u100 = u100.squeeze()
-u100.values[u100.values < 0] = np.nan
-u100 = u100.rio.reproject('epsg:3416')
-u100.values = u100.values / 1000
+a100 = rxr.open_rasterio(ROOTDIR / 'data/gwa3/AUT_combined-Weibull-A_100.tif')
+k100 = rxr.open_rasterio(ROOTDIR / 'data/gwa3/AUT_combined-Weibull-k_100.tif')
+u_mean_100 = a100 * gamma(1/k100 + 1)
+
+# a150 = rxr.open_rasterio(ROOTDIR / 'data/gwa3/AUT_combined-Weibull-A_150.tif')
+# k150 = rxr.open_rasterio(ROOTDIR / 'data/gwa3/AUT_combined-Weibull-k_150.tif')
+# u_mean_150 = a150 * gamma(1 / k150 + 1)
 
 # calculate roughness factor alpha for each pixel and rescale to coordinates of A and k data grid
-alpha = (np.log(u100) - np.log(u50)) / (np.log(100) - np.log(50))
-alpha = alpha.interp_like(A100)
-alpha.to_netcdf(path=ROOTDIR / 'data/preprocessed/awa_roughness.nc', mode='w', format='NETCDF4', engine='netcdf4')
+alpha = (np.log(u_mean_100) - np.log(u_mean_50)) / (np.log(100) - np.log(50))
+alpha.to_netcdf(path=ROOTDIR / 'data/preprocessed/gwa_roughness.nc', mode='w', format='NETCDF4', engine='netcdf4')

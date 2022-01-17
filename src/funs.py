@@ -1,13 +1,16 @@
 # %% imports
+import os
 import numpy as np
 import pandas as pd
 import xarray as xr
 import geopandas as gpd
 import itertools
+import subprocess
 from operator import itemgetter
 from scipy.spatial import KDTree
 from shapely.ops import substring
 from shapely.geometry import Point, LineString
+import gamstransfer as gt
 
 
 # %% capacity factor functions
@@ -64,7 +67,7 @@ def turbine_overnight_cost(power, hub_height, rotor_diameter, year):
 
 
 def grid_invest_cost(distance):
-    cost = 900 * distance + 25000
+    cost = 900 * distance + 12500
     return cost
 
 
@@ -136,3 +139,81 @@ def segments(curve):
         lstlst.extend(lst)
     return lstlst
 
+
+def sliced_location_optimization(gams_dict, gams_transfer_container, lcoe_array, num_slices, num_turbines, space_px,
+                                 gdx_out_string='base', read_only=False, axis=0):
+
+    locations = pd.DataFrame()
+    lcoe_df = pd.DataFrame(data=lcoe_array.data)
+    num_pixels = np.ceil(np.round(lcoe_array.count().data, 0) / (num_slices))
+    os.chdir(gams_dict['gdx_output'])
+    if axis == 0:
+        dim_max = lcoe_array.sizes['x']
+    elif axis == 1:
+        dim_max = lcoe_array.sizes['y']
+    else:
+        raise ValueError('axis must be 0 or 1')
+    j = 0
+    i = 0
+    for n in range(0, num_slices):
+        size = 0
+        while size <= num_pixels and i < dim_max:
+            if axis == 0:
+                lcoe_slice = lcoe_df.iloc[:, i]
+            elif axis == 1:
+                lcoe_slice = lcoe_df.iloc[i, :]
+            else:
+                raise ValueError('Only 2-dimensional arrays allowed')
+            lcoe_slice = lcoe_slice.dropna()
+            i += 1
+            size = size + len(lcoe_slice)
+
+        if axis == 0:
+            lcoe_map = lcoe_df.iloc[:, j:i]
+        else:
+            lcoe_map = lcoe_df.iloc[j:i, :]
+
+        gdx_out = gams_dict['gdx_output'] / f'locations_{gdx_out_string}_{n}.gdx'
+        if not read_only:
+            gams_transfer_container.removeSymbols(['l', 'b', 'i', 'j', 'lcoe', 'num_turbines'])
+            laenge = gams_transfer_container.addSet('l', records=list(lcoe_map.index), description='laenge')
+            breite = gams_transfer_container.addSet('b', records=list(lcoe_map.columns), description='breite')
+            abstd_l = gams_transfer_container.addSet('i', records=list(range(0, space_px)), description='abstand in laenge')
+            abstd_b = gams_transfer_container.addSet('j', records=list(range(0, space_px)), description='abstand in  breite')
+            gams_transfer_container.addParameter('lcoe', domain=[laenge, breite],
+                                                                  records=lcoe_map.stack().reset_index())
+            gams_transfer_container.addParameter('num_turbines', domain=[], records=num_turbines)
+            gams_transfer_container.write(str(gams_dict['gdx_input']))
+            # run optimization
+            gms_exe_dir = gams_dict['gams_exe']
+            gms_model = gams_dict['gams_model']
+            subprocess.run(f'{gms_exe_dir}\\gams {gms_model} gdx={gdx_out} lo=3 o=nul')
+
+        results = gt.Container()
+        results.read(str(gdx_out), 'build')
+        locs = results.data['build'].records[['l_0', 'b_1', 'level']]
+        locs = locs.loc[locs['level'] > 0]
+        locations = locations.append(locs)
+        # print(f'j: {j}, i: {i}. Using rows {j} to {i} with pixel {num_pixels} of size of {size}')
+        j = i
+    locations['l_0'] = locations['l_0'].astype('int')
+    locations['b_1'] = locations['b_1'].astype('int')
+    return locations
+
+
+def distance_2d(df, dim1, dim2):
+    # original code snippet from:
+    # https://gis.stackexchange.com/questions/222315/finding-nearest-point-in-other-geodataframe-using-geopandas/301935#301935
+    A = df[[dim1, dim2]].values  # np.concatenate([np.array(geom.coords) for geom in gdfA.geometry.to_list()])
+    kd_tree = KDTree(A)
+    dist, idx = kd_tree.query(A, k=2)
+    return dist, idx
+
+
+def locations_to_gdf(location_array, locations):
+    lcoe_gdf = location_array[locations['l_0'], locations['b_1']]
+    lcoe_gdf = gpd.GeoDataFrame(data=lcoe_gdf.data.diagonal(), columns=['LCOE'],
+                                geometry=gpd.points_from_xy(lcoe_gdf.x, lcoe_gdf.y), crs=lcoe_gdf.rio.crs)
+    lcoe_gdf = lcoe_gdf.sort_values(by='LCOE')
+    lcoe_gdf.reset_index(inplace=True, drop=True)
+    return lcoe_gdf

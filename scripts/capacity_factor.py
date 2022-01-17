@@ -12,22 +12,26 @@ from src.funs import weibull_probability_density, capacity_factor
 
 # %% read data
 if where == 'home':
-    ROOTDIR = Path('/')
+    ROOTDIR = Path('c:/git_repos/impax')
 else:
     ROOTDIR = Path('d:/git_repos/impax')
 
 # read A and k parameters of windspeed Weibull distribution from Austrian wind atlas
-A100 = rxr.open_rasterio(ROOTDIR / 'data/windatlas/a120_100m_Lambert.img')
-A100 = A100.rio.reproject('EPSG:3416').squeeze()
-A100.values[A100.values <= 0] = np.nan
+A100 = rxr.open_rasterio(ROOTDIR / 'data/gwa3/AUT_combined-Weibull-A_100.tif')
+A100 = A100.squeeze()
+# A100.values[A100.values <= 0] = np.nan
+# A100 = A100.shift(x=4, y=-1)
 
-k100 = rxr.open_rasterio(ROOTDIR / 'data/windatlas/k120_100m_Lambert.img')
-k100 = k100.rio.reproject('EPSG:3416').squeeze()
-k100.values[k100.values <= 0] = np.nan
+k100 = rxr.open_rasterio(ROOTDIR / 'data/gwa3/AUT_combined-Weibull-k_100.tif')
+k100 = k100.squeeze()
+# k100.values[k100.values <= 0] = np.nan
+# k100 = k100.shift(x=4, y=-1)
 
 # read preprocessed data
-alpha = xr.open_dataarray(ROOTDIR / 'data/preprocessed/awa_roughness.nc')
-rho = xr.open_dataarray(ROOTDIR / 'data/preprocessed/air_density.nc')
+alpha = xr.open_dataarray(ROOTDIR / 'data/preprocessed/gwa_roughness.nc')
+alpha = alpha.squeeze()
+rho = xr.open_dataarray(ROOTDIR / 'data/preprocessed/gwa_air_density.nc')
+rho = rho.squeeze()
 powercurves = pd.read_csv(ROOTDIR / 'data/preprocessed/powercurves.csv', sep=";", decimal=',')
 u_pwrcrv = powercurves['speed'].values
 powercurves.set_index('speed', drop=True, inplace=True)
