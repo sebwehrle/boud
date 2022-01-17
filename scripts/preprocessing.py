@@ -8,16 +8,9 @@ from scipy.special import gamma
 from scipy.interpolate import interp1d
 from ast import literal_eval
 
-from config import where, turbines
-
-# %% global settings
-if where == 'home':
-    ROOTDIR = Path('c:/git_repos/impax')
-else:
-    ROOTDIR = Path('d:/git_repos/boud')
+from config import ROOTDIR, turbines
 
 # %% turbine power curves
-# read turbine power curves
 # renewables ninja
 rnj_power_curves = pd.read_csv(ROOTDIR / 'data/power_curves/rnj_power_curve_000-smooth.csv')
 # open energy platform --
@@ -29,10 +22,9 @@ nrel_power_curves = pd.read_csv(ROOTDIR / 'data/power_curves/sam_wind_turbines.c
 nrel_power_curves['Wind Speed Array'].replace('|', ',')
 
 # process power curves
-u_pwrcrv = np.linspace(0.5, 30, num=60)  # np.linspace(0, 30, num=61)
+u_pwrcrv = np.linspace(0.5, 30, num=60)
 powercurves = pd.DataFrame(index=u_pwrcrv)
 
-#for n in oep_power_curves.index:
 missing_turbs = []
 for turbine, _ in turbines.items():
     if oep_power_curves['type_string'].str.contains(turbine).any():
@@ -71,10 +63,6 @@ u_mean_50 = a50 * gamma(1 / k50 + 1)
 a100 = rxr.open_rasterio(ROOTDIR / 'data/gwa3/AUT_combined-Weibull-A_100.tif')
 k100 = rxr.open_rasterio(ROOTDIR / 'data/gwa3/AUT_combined-Weibull-k_100.tif')
 u_mean_100 = a100 * gamma(1/k100 + 1)
-
-# a150 = rxr.open_rasterio(ROOTDIR / 'data/gwa3/AUT_combined-Weibull-A_150.tif')
-# k150 = rxr.open_rasterio(ROOTDIR / 'data/gwa3/AUT_combined-Weibull-k_150.tif')
-# u_mean_150 = a150 * gamma(1 / k150 + 1)
 
 # calculate roughness factor alpha for each pixel and rescale to coordinates of A and k data grid
 alpha = (np.log(u_mean_100) - np.log(u_mean_50)) / (np.log(100) - np.log(50))

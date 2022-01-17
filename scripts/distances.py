@@ -1,25 +1,15 @@
 # %% imports
-from pathlib import Path
-import geopandas as gpd
-import numpy as np
 import pandas as pd
-import xarray as xr
+import geopandas as gpd
 import rioxarray as rxr
 from shapely import wkt
 
-from config import where
+from config import ROOTDIR
 from src.funs import segments, splitlines, kdnearest
 
 # %% read data
-if where == 'home':
-    ROOTDIR = Path('c:/git_repos/impax')
-else:
-    ROOTDIR = Path('d:/git_repos/boud')
-
 # open file which will hold the distance data
 template = rxr.open_rasterio(ROOTDIR / 'data/gwa3/AUT_combined-Weibull-A_100.tif')
-# template.values[template.values <= 0] = np.nan
-# template = template.shift(x=4, y=-1)
 template = template.rio.reproject('EPSG:3416').squeeze()
 template_stacked = template.stack(xy=['x', 'y'])
 
@@ -34,7 +24,6 @@ lines = gpd.GeoDataFrame(lines, crs='epsg:4326')
 lines = lines.to_crs(template.rio.crs)
 lines = gpd.clip(lines, austria)
 lines = lines.explode()
-
 
 # split lines
 lines = splitlines(lines, 64)
@@ -56,7 +45,6 @@ gdf = gpd.GeoDataFrame(geometry=gpd.points_from_xy(
 gdf = gdf.to_crs('epsg:3416')
 
 dists = kdnearest(gdf, infra, gdfB_cols=[])  # gdfB_cols=['name', 'v_id_1', 'v_id_2'])
-# dists = dists.to_crs('epsg:3416')  # should already be in epsg:3416!
 
 # %% assign values back to DataArray
 # set multiindex to GeoDataFrame

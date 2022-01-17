@@ -1,20 +1,14 @@
 # %% imports
-# import os
 from pathlib import Path
-# import numpy as np
-# import pandas as pd
 import xarray as xr
 import gamstransfer as gt
-# import subprocess
 import geopandas as gpd
-# from shapely.geometry import Polygon, box
-from src.funs import distance_2d, sliced_location_optimization, locations_to_gdf
+from config import ROOTDIR
+from src.funs import sliced_location_optimization, locations_to_gdf
 
 import matplotlib.pyplot as plt
 
 # %%
-ROOTDIR = Path('d:/git_repos/boud')
-
 gams_dict = {
     'gams_model': ROOTDIR / 'opt/location_selection.gms',
     'gdx_input': ROOTDIR / 'opt/input_data.gdx',

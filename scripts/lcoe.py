@@ -1,11 +1,9 @@
 # %% imports
 import os
-from pathlib import Path
 import pandas as pd
 import xarray as xr
-import rioxarray as rxr
 
-from config import where, turbines
+from config import ROOTDIR, turbines
 from src.funs import turbine_overnight_cost, grid_invest_cost, levelized_cost
 
 # %% settings
@@ -17,16 +15,11 @@ discount_rate = 0.03
 lifetime = 25
 
 # %% get data
-if where == 'home':
-    ROOTDIR = Path('c:/git_repos/impax')
-else:
-    ROOTDIR = Path('d:/git_repos/boud')
-
-# %% read capacity factors
+# read capacity factors
 cf = xr.open_dataarray(ROOTDIR / 'data/preprocessed/capacity_factors.nc')
 cf = cf.rio.reproject('epsg:3416')
 # read distances to grid
-dt = xr.open_dataset(ROOTDIR / 'data/preprocessed/grid_distance.nc')  #, drop_variables='spatial_ref')
+dt = xr.open_dataset(ROOTDIR / 'data/preprocessed/grid_distance.nc')
 dt = dt.rio.write_crs('epsg:3416')
 # read power curves
 powercurves = pd.read_csv(ROOTDIR / 'data/preprocessed/powercurves.csv', sep=';', decimal=',')

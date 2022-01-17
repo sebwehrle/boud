@@ -1,10 +1,9 @@
 # %% imports
 import os
-from pathlib import Path
 import requests
 import zipfile
 
-ROOTDIR = Path('d:/git_repos/boud')
+from config import ROOTDIR
 
 # %% define functions
 

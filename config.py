@@ -1,5 +1,14 @@
-# global settings
+# %% imports
+from pathlib import Path
+
+
+# %% global settings
 where = 'office'
+if where == 'home':
+    ROOTDIR = Path('d:/git_repos/impax')
+else:
+    ROOTDIR = Path('c:/git_repos/boud')
+
 
 # turbines to consider
 turbines = {

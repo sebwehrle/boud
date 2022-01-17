@@ -1,11 +1,6 @@
 # %% imports
-from pathlib import Path
 import xarray as xr
-import rioxarray as rxr
-from config import turbines
-
-# global variables
-ROOTDIR = Path('/')
+from config import ROOTDIR, turbines
 
 # %% read data
 cf = xr.open_dataarray(ROOTDIR / 'data/preprocessed/capacity_factors.nc')

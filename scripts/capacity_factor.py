@@ -6,16 +6,11 @@ import rioxarray as rxr
 import xarray as xr
 import matplotlib.pyplot as plt
 
-from config import where, turbines
+from config import ROOTDIR, turbines
 from src.funs import weibull_probability_density, capacity_factor
 
 
 # %% read data
-if where == 'home':
-    ROOTDIR = Path('c:/git_repos/impax')
-else:
-    ROOTDIR = Path('d:/git_repos/boud')
-
 # read A and k parameters of windspeed Weibull distribution from Austrian wind atlas
 A100 = rxr.open_rasterio(ROOTDIR / 'data/gwa3/AUT_combined-Weibull-A_100.tif')
 A100 = A100.squeeze()
