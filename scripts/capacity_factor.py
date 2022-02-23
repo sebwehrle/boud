@@ -29,12 +29,12 @@ p = weibull_probability_density(u_pwrcrv, k100, A100)
 
 #%% fold wind speed probability density and wind turbine power curve
 cf_arr = []
-for turbine_type in powercurves.columns:
+for turbine_type in turbines.keys():
     cf = capacity_factor(p, alpha, u_pwrcrv, powercurves[turbine_type].values,
                          h_turbine=turbines[turbine_type][1]) * rho
     cf_arr.append(cf)
 
 cap_factors = xr.concat(cf_arr, dim='turbine_models')
-cap_factors = cap_factors.assign_coords({'turbine_models': powercurves.columns.values})
+cap_factors = cap_factors.assign_coords({'turbine_models': list(turbines.keys())})
 cap_factors.to_netcdf(path=ROOTDIR / 'data/preprocessed/capacity_factors.nc', format='NETCDF4', engine='netcdf4')
 cap_factors.close()

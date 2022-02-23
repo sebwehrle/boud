@@ -7,12 +7,12 @@ from config import ROOTDIR, turbines
 from src.funs import turbine_overnight_cost, grid_invest_cost, levelized_cost
 
 # %% settings
-year = 2016
+# year = 2016
 availability = 0.85
-fix_om = 20  # EUR/kW
-var_om = 0.008 * 1000  # EUR/kWh
-discount_rate = 0.03
-lifetime = 25
+fix_om = 0  # 20  # EUR/kW
+var_om = 26.4  # 0.008 * 1000  # EUR/kWh
+discount_rate = 0.05  # 0.03
+lifetime = 20  # 25
 
 # %% get data
 # read capacity factors
@@ -34,10 +34,11 @@ for key, value in turbines.items():
         power = value[0]/1000
         hub_height = value[1]
         rotor_diameter = value[2]
-        overnight_cost = turbine_overnight_cost(power, hub_height, rotor_diameter, year) * 1000
+        overnight_cost = turbine_overnight_cost(power, hub_height, rotor_diameter, value[3]) * 1000
         onc.append(overnight_cost)
         capacity_factor = cf.sel(turbine_models=key)
-        lcoe = levelized_cost(capacity_factor, availability, overnight_cost, grid_cost, fix_om, var_om, discount_rate, lifetime)
+        lcoe = levelized_cost(capacity_factor, 1675000, grid_cost, fix_om, var_om, discount_rate, lifetime)
+                              # overnight_cost, grid_cost, fix_om, var_om, discount_rate, lifetime)
         LCOE.append(lcoe)
     else:
         pass
@@ -47,4 +48,5 @@ lcoe = xr.concat(LCOE, dim='turbine_models')
 dir_results = ROOTDIR / 'data/results'
 if not os.path.exists(dir_results):
     os.mkdir(dir_results)
-lcoe.to_netcdf(dir_results / 'lcoe.nc')
+lcoe.to_netcdf(dir_results / 'lcoe_hoeltinger.nc')
+

@@ -42,7 +42,23 @@ data_dict = {
     'gridkit_europe.zip': [ROOTDIR / 'data/grid', 'https://zenodo.org/record/47317/files/gridkit_euorpe.zip?download=1'],
     'RRU_WIND_ZONEN_P19.zip': [ROOTDIR / 'data/zones', 'https://sdi.noe.gv.at/at.gv.noe.geoserver/OGD/wfs?request=GetFeature&version=1.1.0&typeName=OGD:RRU_WIND_ZONEN_P19&srsName=EPSG:31259&outputFormat=shape-zip&format_options=CHARSET:UTF-8'],
     'Widmungsflaechen.zip': [ROOTDIR / 'data/zones', 'https://geodaten.bgld.gv.at/de/downloads/fachdaten.html?tx_gisdownloads_gisdownloads%5Bcontroller%5D=Download&tx_gisdownloads_gisdownloads%5Bf%5D=WIDMUNGSFLAECHEN.zip&tx_gisdownloads_gisdownloads%5Bs%5D=4'],
-    'SAPRO_Windenergie_zone.zip': [ROOTDIR / 'data/zones', 'https://service.stmk.gv.at/ogd/OGD_Data_ABT17/geoinformation/SAPRO_Windenergie_zone.zip']
+    'SAPRO_Windenergie_zone.zip': [ROOTDIR / 'data/zones', 'https://service.stmk.gv.at/ogd/OGD_Data_ABT17/geoinformation/SAPRO_Windenergie_zone.zip'],
+    'WINDKRAFT_AUSSCHLUSSZONE.zip': [ROOTDIR / 'data/zones', 'https://e-gov.ooe.gv.at/at.gv.ooe.dorisdaten/DORIS_U/WINDKRAFT_AUSSCHLUSSZONE.zip'],
+    'nationalparks.zip': [ROOTDIR / 'data/schutzgebiete', 'https://docs.umweltbundesamt.at/s/Ezq6NEJ8LTg6s8j/download/nationalparks_2012.zip'],
+    'natura_2000_vbg.zip': [ROOTDIR / 'data/schutzgebiete', 'http://vogis.cnv.at/geoserver/vogis/ows?service=WFS&version=1.1.0&request=GetFeature&srsName=EPSG:3857&typeName=vogis:natura_2000&maxFeatures=50000&outputFormat=SHAPE-ZIP'],
+    'natura_2000_stmk.zip' :[ROOTDIR / 'data/schutzgebiete', 'https://service.stmk.gv.at/ogd/OGD_Data_ABT17/geoinformation/Europaschutzgebiete.zip'],
+    'natura_2000_ktn.zip': [ROOTDIR / 'data/schutzgebiete', 'https://gis.ktn.gv.at/OGD/INSPIRE/PS_ProtectedSite_KTN_GPKG.zip'],
+    'natura_2000_ooe.zip': [ROOTDIR / 'data/schutzgebiete', 'https://e-gov.ooe.gv.at/at.gv.ooe.dorisdaten/DORIS_U/VWNATUR_EUSCHUTZGEBIETE_DKM.zip'],
+    'natura_2000_vs_sbg.zip': [ROOTDIR / 'data/schutzgebiete', 'https://www.salzburg.gv.at/ogd/36548839-fe5e-4148-ae1d-a3f0fc88fba1/Europaschutzgebiete_VS_RL_Shapefile.zip'],
+    'natura_2000_vs_vie.zip': [ROOTDIR / 'data/schutzgebiete', 'https://data.wien.gv.at/daten/geo?service=WFS&request=GetFeature&version=1.1.0&typeName=ogdwien:NATURA2TVOGELOGD&srsName=EPSG:4326&outputFormat=shape-zip'],
+    'natura_2000_vs_noe.zip': [ROOTDIR / 'data/schutzgebiete', 'https://sdi.noe.gv.at/at.gv.noe.geoserver/OGD/wfs?request=GetFeature&version=1.1.0&typeName=OGD:RNA_N2K_VS&srsName=EPSG:31259&outputFormat=shape-zip&format_options=CHARSET:UTF-8'],
+    'natura_2000_vs_tir.zip': [ROOTDIR / 'data/schutzgebiete', 'http://gis.tirol.gv.at/inspire/downloadservice/Natura2000_Vogelschutzrichtlinie_ETRS89UTM32N.zip'],
+    'natura_2000_vs_bgl.zip': [ROOTDIR / 'data/schutzgebiete', 'https://geodaten.bgld.gv.at/de/downloads/fachdaten.html?tx_gisdownloads_gisdownloads%5Bcontroller%5D=Download&tx_gisdownloads_gisdownloads%5Bf%5D=N2000_VOGELSCHUTZRICHTLINIE.zip&tx_gisdownloads_gisdownloads%5Bs%5D=4&cHash=2d47869118468745c88155103a546cfe'],
+    'natura_2000_ffh_noe.zip': [ROOTDIR / 'data/schutzgebiete', 'https://sdi.noe.gv.at/at.gv.noe.geoserver/OGD/wfs?request=GetFeature&version=1.1.0&typeName=OGD:RNA_N2K_FFH&srsName=EPSG:31259&outputFormat=shape-zip&format_options=CHARSET:UTF-8'],
+    'natura_2000_ffh_sbg.zip': [ROOTDIR / 'data/schutzgebiete', 'https://www.salzburg.gv.at/ogd/7c30326b-fec8-4e85-bb03-65796cc3d63d/Europaschutzgebiete_FFH_RL_Shapefile.zip'],
+    'natura_2000_ffh_vie.zip': [ROOTDIR / 'data/schutzgebiete', 'https://data.wien.gv.at/daten/geo?service=WFS&request=GetFeature&version=1.1.0&typeName=ogdwien:NATURA2TOGD&srsName=EPSG:4326&outputFormat=shape-zip'],
+    'natura_2000_ffh_tir.zip': [ROOTDIR / 'data/schutzgebiete', 'http://gis.tirol.gv.at/inspire/downloadservice/Natura2000_FFH_Richtlinie_ETRS89UTM32N.zip'],
+    'natura_2000_ffh_bgl.zip': [ROOTDIR / 'data/schutzgebiete', 'https://geodaten.bgld.gv.at/de/downloads/fachdaten.html?tx_gisdownloads_gisdownloads%5Bcontroller%5D=Download&tx_gisdownloads_gisdownloads%5Bf%5D=N2000_HABITATRICHTLINIE.zip&tx_gisdownloads_gisdownloads%5Bs%5D=4&cHash=0bbfac0c2f3931d334e3ee13c50e92f5'],
 }
 
 # %% get data_dict data0

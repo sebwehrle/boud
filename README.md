@@ -3,10 +3,12 @@
 Benefits of undisturbed landscapes -- estimating the opportunity cost of wind turbine placement in Austria
 
 ## Data requirements
+All data can be downloaded through the scripts `data_download.py` and `turbine_download.py`.
+
 ### Preprocessing
 * Wind turbine power curves: renewables.ninja's [virtual wind farm](https://github.com/renewables-ninja/vwf)
 and [open energy platform](https://openenergy-platform.org/dataedit/view/supply/wind_turbine_library).
-* Roughness: average wind speeds at 50m and 100m height on a 100m x 100m raster from the [Austrian wind atlas](https://www.windatlas.at/). Not publicly available.
+* Roughness: average wind speeds at 50m and 100m height on a 250m raster from the [Global wind atlas](https://globalwindatlas.info/download/gis-files).
 * Air density: Digital terrain model of Austria on a 10m x 10m raster. From [Open Data Österreich / Land Kärnten](https://www.data.gv.at/katalog/dataset/d88a1246-9684-480b-a480-ff63286b35b7).
 
 ### Distance to grid
@@ -23,8 +25,14 @@ Not publicly available.
 
 ## Replication
 For the time being, replicating the results requires to run the scripts in the following order:
-1) [`preprocessing.py`](https://github.com/sebwehrle/boud/blob/main/scripts/preprocessing.py)
-2) [`distances.py`](https://github.com/sebwehrle/boud/blob/main/scripts/distances.py)
-3) [`capacity_factor.py`](https://github.com/sebwehrle/boud/blob/main/scripts/capacity_factor.py)
-4) [`lcoe.py`]()
+1) [`data_download.py`](https://github.com/sebwehrle/boud/blob/main/scripts/data_download.py)
+2) [`turbine_download.py`](https://github.com/sebwehrle/boud/blob/main/scripts/turbine_download.py)
+3) [`preprocessing.py`](https://github.com/sebwehrle/boud/blob/main/scripts/preprocessing.py)
+4) [`distances.py`](https://github.com/sebwehrle/boud/blob/main/scripts/distances.py)
+5) [`capacity_factor.py`](https://github.com/sebwehrle/boud/blob/main/scripts/capacity_factor.py)
+6) [`lcoe.py`](https://github.com/sebwehrle/boud/blob/main/scripts/lcoe.py)
+7) [`power_energy.py`]()
+
+`zoning.py` is based on these results and calculates optimal spacing of turbines with a 500m radius within 
+wind power zones in Lower Austria, Styria and Burgenland as well as in the whole state.
 

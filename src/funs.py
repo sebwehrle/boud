@@ -30,7 +30,7 @@ def weibull_probability_density(u_power_curve, k, A):
     return pdf
 
 
-def capacity_factor(pdf, alpha, u_power_curve, p_power_curve, h_turbine, h_reference=100):
+def capacity_factor(pdf, alpha, u_power_curve, p_power_curve, h_turbine, h_reference=100, availability=0.85):
     """
     calculates wind turbine capacity factors given Weibull probability density pdf, roughness factor alpha, wind turbine
     power curve data in u_power_curve and p_power_curve, turbine height h_turbine and reference height of wind speed
@@ -47,14 +47,14 @@ def capacity_factor(pdf, alpha, u_power_curve, p_power_curve, h_turbine, h_refer
     u_adjusted = xr.DataArray(data=u_power_curve, coords={'wind_speed': u_power_curve}) @ (h_turbine/h_reference)**alpha
     cap_factor_values = np.trapz(pdf * power_curve, u_adjusted, axis=0)
     cap_factor = alpha.copy()
-    cap_factor.values = cap_factor_values
+    cap_factor.values = cap_factor_values * availability
     return cap_factor
 
 
 # %% LCOE functions
 def turbine_overnight_cost(power, hub_height, rotor_diameter, year):
     """
-    calculates wind turbine investment cost in EUR per kw
+    calculates wind turbine investment cost in EUR per MW
     :param power: im MW
     :param hub_height: in m
     :param rotor_diameter: in m
@@ -62,7 +62,7 @@ def turbine_overnight_cost(power, hub_height, rotor_diameter, year):
     """
     rotor_area = np.pi * (rotor_diameter / 2) ** 2
     spec_power = power * 10**6 / rotor_area
-    cost = (620 * np.log(hub_height)) - (1.68 * spec_power) + (182 * (year - 2016) ** 0.5) - 1005
+    cost = ((620 * np.log(hub_height)) - (1.68 * spec_power) + (182 * (2016 - year) ** 0.5) - 1005) * 1000
     return cost.astype('float')
 
 
@@ -78,7 +78,7 @@ def discount_factor(discount_rate, period):
     return dcf
 
 
-def levelized_cost(capacity_factor, availability, overnight_cost, grid_cost, fix_om, var_om, discount_rate, lifetime):
+def levelized_cost(capacity_factor, overnight_cost, grid_cost, fix_om, var_om, discount_rate, lifetime):
     """
     Calculates wind turbines' levelized cost of electricity in EUR per MWh
     :param capacity_factor: xarray DataArray
@@ -90,7 +90,7 @@ def levelized_cost(capacity_factor, availability, overnight_cost, grid_cost, fix
     :param lifetime: years
     :return:
     """
-    npv_energy = capacity_factor * availability * 8760 * discount_factor(discount_rate, lifetime)
+    npv_energy = capacity_factor * 8760 * discount_factor(discount_rate, lifetime)
 
     npv_cost = capacity_factor.copy()
     npv_cost = npv_cost.where(npv_cost.isnull(), (var_om * capacity_factor * 8760 + fix_om) * discount_factor(discount_rate, lifetime))
@@ -210,10 +210,16 @@ def distance_2d(df, dim1, dim2):
     return dist, idx
 
 
-def locations_to_gdf(location_array, locations):
-    lcoe_gdf = location_array[locations['l_0'], locations['b_1']]
+def locations_to_gdf(lcoe_array, locations, energy_array=None, power_array=None):
+    lcoe_gdf = lcoe_array[locations['l_0'], locations['b_1']]
     lcoe_gdf = gpd.GeoDataFrame(data=lcoe_gdf.data.diagonal(), columns=['LCOE'],
                                 geometry=gpd.points_from_xy(lcoe_gdf.x, lcoe_gdf.y), crs=lcoe_gdf.rio.crs)
+    if energy_array is not None:
+        energy = energy_array[locations['l_0'], locations['b_1']].data.diagonal()
+        lcoe_gdf['Energy'] = energy
+    if power_array is not None:
+        power = power_array[locations['l_0'], locations['b_1']].data.diagonal()
+        lcoe_gdf['Power'] = power
     lcoe_gdf = lcoe_gdf.sort_values(by='LCOE')
     lcoe_gdf.reset_index(inplace=True, drop=True)
     return lcoe_gdf
