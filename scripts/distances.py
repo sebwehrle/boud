@@ -4,12 +4,12 @@ import geopandas as gpd
 import rioxarray as rxr
 from shapely import wkt
 
-from config import ROOTDIR
+from config import ROOTDIR, country
 from src.funs import segments, splitlines, kdnearest
 
 # %% read data
 # open file which will hold the distance data
-template = rxr.open_rasterio(ROOTDIR / 'data/gwa3/AUT_combined-Weibull-A_100.tif')
+template = rxr.open_rasterio(ROOTDIR / f'data/gwa3/{country}_combined-Weibull-A_100.tif')
 template = template.rio.reproject('EPSG:3416').squeeze()
 template_stacked = template.stack(xy=['x', 'y'])
 
@@ -62,4 +62,4 @@ template_stacked.values = df['dist'].values
 cfu = template_stacked.unstack().transpose()
 
 # %% write results
-cfu.to_netcdf(path=ROOTDIR / 'data/preprocessed/grid_distance.nc')
+cfu.to_netcdf(path=ROOTDIR / f'data/preprocessed/grid_distance_{country}.nc')

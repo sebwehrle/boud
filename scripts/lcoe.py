@@ -3,7 +3,7 @@ import os
 import pandas as pd
 import xarray as xr
 
-from config import ROOTDIR, turbines
+from config import ROOTDIR, turbines, country
 from src.funs import turbine_overnight_cost, grid_invest_cost, levelized_cost
 
 # %% settings
@@ -16,10 +16,10 @@ lifetime = 20  # 25
 
 # %% get data
 # read capacity factors
-cf = xr.open_dataarray(ROOTDIR / 'data/preprocessed/capacity_factors.nc')
+cf = xr.open_dataarray(ROOTDIR / f'data/preprocessed/capacity_factors_{country}.nc')
 cf = cf.rio.reproject('epsg:3416')
 # read distances to grid
-dt = xr.open_dataset(ROOTDIR / 'data/preprocessed/grid_distance.nc')
+dt = xr.open_dataset(ROOTDIR / f'data/preprocessed/grid_distance_{country}.nc')
 dt = dt.rio.write_crs('epsg:3416')
 # read power curves
 powercurves = pd.read_csv(ROOTDIR / 'data/preprocessed/powercurves.csv', sep=';', decimal=',')
@@ -48,5 +48,5 @@ lcoe = xr.concat(LCOE, dim='turbine_models')
 dir_results = ROOTDIR / 'data/results'
 if not os.path.exists(dir_results):
     os.mkdir(dir_results)
-lcoe.to_netcdf(dir_results / 'lcoe_hoeltinger.nc')
+lcoe.to_netcdf(dir_results / f'lcoe_hoeltinger_{country}.nc')
 

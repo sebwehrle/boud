@@ -9,6 +9,7 @@ if where == 'home':
 else:
     ROOTDIR = Path('d:/git_repos/boud')
 
+country = 'AUT'
 
 # turbines to consider
 turbines = {
