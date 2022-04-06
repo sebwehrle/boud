@@ -1,36 +1,20 @@
 # %% imports
 import os
-import requests
+import json
 import zipfile
+import numpy as np
+import pandas as pd
 
-from config import ROOTDIR
+from config import ROOTDIR, country
+from src.utils import download_file
 
-# %% define functions
 
-
-def download_file(url, filename):
-    with requests.get(url) as r:
-        with open(filename, 'wb') as f:
-            f.write(r.content)
-
-# %% get global wind atlas
-country = ['AUT']
+# %% global wind atlas settings
+url_gwa = 'https://globalwindatlas.info/api/gis/country'
+country = [country]
 layer = ['air-density', 'combined-Weibull-A', 'combined-Weibull-k']
 ground = ['elevation_w_bathymetry']
 height = ['50', '100', '150']
-
-if not os.path.exists(ROOTDIR / 'data/gwa3'):
-    os.mkdir(ROOTDIR / 'data/gwa3')
-
-url_gwa = 'https://globalwindatlas.info/api/gis/country'
-for c in country:
-    for l in layer:
-        for h in height:
-            fname = f'{c}_{l}_{h}.tif'
-            download_file(f'{url_gwa}/{c}/{l}/{h}', ROOTDIR / 'data/gwa3' / fname)
-    for g in ground:
-        fname = f'{c}_{g}.tif'
-        download_file(f'{url_gwa}/{c}/{g}', ROOTDIR / 'data/gwa3' / fname)
 
 # %% file, directory, url dict
 data_dict = {
@@ -61,6 +45,19 @@ data_dict = {
     'natura_2000_ffh_bgl.zip': [ROOTDIR / 'data/schutzgebiete', 'https://geodaten.bgld.gv.at/de/downloads/fachdaten.html?tx_gisdownloads_gisdownloads%5Bcontroller%5D=Download&tx_gisdownloads_gisdownloads%5Bf%5D=N2000_HABITATRICHTLINIE.zip&tx_gisdownloads_gisdownloads%5Bs%5D=4&cHash=0bbfac0c2f3931d334e3ee13c50e92f5'],
 }
 
+# %% get global wind atlas
+if not os.path.exists(ROOTDIR / 'data/gwa3'):
+    os.mkdir(ROOTDIR / 'data/gwa3')
+
+for c in country:
+    for l in layer:
+        for h in height:
+            fname = f'{c}_{l}_{h}.tif'
+            download_file(f'{url_gwa}/{c}/{l}/{h}', ROOTDIR / 'data/gwa3' / fname)
+    for g in ground:
+        fname = f'{c}_{g}.tif'
+        download_file(f'{url_gwa}/{c}/{g}', ROOTDIR / 'data/gwa3' / fname)
+
 # %% get data_dict data0
 for file, addr in data_dict.items():
     if not os.path.exists(addr[0]):
@@ -69,3 +66,84 @@ for file, addr in data_dict.items():
     if file[-3:] == 'zip':
         with zipfile.ZipFile(addr[0] / file) as zip_ref:
             zip_ref.extractall(addr[0])
+
+# %% settings for downloading and processing wind turbine data from IG Windkraft
+igwurl = 'https://www.igwindkraft.at/src_project/external/maps/generated/gmaps_daten.js'
+
+streptyp = {
+    'E-40': 'E40',
+    'E40/5.40': 'E40 5.40',
+    'E40 5.4': 'E40 5.40',
+    'E66 18.7': 'E66 18.70',
+    'E66/18.70': 'E66 18.70',
+    'E66.18': 'E66 18.70',
+    'E66 20.7': 'E66 20.70',
+    'E70/E4': 'E70 E4',
+    'E70/20.71': 'E70 E4',
+    'E70': 'E70 E4',
+    'E-101': 'E101',
+    'E 101': 'E101',
+    'E115/3.000': 'E115',
+    '3.XM': '3XM',
+    'V126/3450': 'V126',
+}
+
+strepher = {
+    'ENERCON': 'Enercon',
+    'DeWind': 'Dewind',
+}
+
+# %% retrieve and process turbine data
+
+if not os.path.exists(ROOTDIR / 'data/AT_turbines'):
+    os.mkdir(ROOTDIR / 'data/AT_turbines')
+download_file(igwurl, ROOTDIR / 'data/AT_turbines/igwind.js')
+
+with open(ROOTDIR / 'data/AT_turbines/igwind.js', 'rt') as f:
+    with open(ROOTDIR / 'data/AT_turbines/turbines.json', 'wt') as g:
+        for line in f:
+            g.write(line.replace('var officeLayer = ', ''))
+f.close()
+g.close()
+
+with open(ROOTDIR / 'data/AT_turbines/turbines.json', 'rt') as k:
+    turbson = json.load(k)
+k.close()
+
+tlst = []
+for i in range(0, len(turbson[1]['places'])):
+    tlst.append(turbson[1]['places'][i]['data'])
+
+igw = pd.DataFrame(tlst, columns=['Name', 'Betreiber1', 'Betreiber2', 'n_Anlagen', 'kW', 'Type', 'Jahr', 'x', 'lat',
+                                  'lon', 'url', 'Hersteller', 'Nabenhöhe', 'Rotordurchmesser'])
+
+igw['Type'] = igw['Type'].replace(streptyp)
+igw['Hersteller'] = igw['Hersteller'].replace(strepher)
+
+# clean Types
+igw.loc[(igw['Type'] == 'E40') & (igw['kW'] == 500), 'Type'] = 'E40 5.40'
+igw.loc[(igw['Type'] == 'E40') & (igw['kW'] == 600), 'Type'] = 'E40 6.44'
+igw.loc[(igw['Type'] == 'E66') & (igw['kW'] == 1800), 'Type'] = 'E66 18.70'
+igw.loc[(igw['Type'] == 'E82') & (igw['kW'] == 2300), 'Type'] = 'E82 E2'
+igw.loc[(igw['Type'] == 'E115') & (igw['kW'] == 3200), 'Type'] = 'E115 E2'
+igw.loc[(igw['Type'] == 'M114') & (igw['kW'] == 3170), 'Type'] = '3.2M114'
+
+# Add detail for Oberwaltersdorf -
+# source: https://www.ris.bka.gv.at/Dokumente/Bvwg/BVWGT_20150313_W102_2008321_1_00/BVWGT_20150313_W102_2008321_1_00.html
+igw.loc[igw['Name'].str.contains('Oberwaltersdorf'), 'Type'] = 'V112'
+igw.loc[igw['Name'].str.contains('Oberwaltersdorf'), 'Nabenhöhe'] = '140'
+igw.loc[igw['Name'].str.contains('Oberwaltersdorf'), 'Rotordurchmesser'] = '112'
+
+# Add detail for Pretul -
+# source: https://www.bundesforste.at/fileadmin/erneuerbare_energie/Folder_Windpark-Pretul_FINAL_screen.pdf
+igw.loc[igw['Name'].str.contains('Pretul'), 'Type'] = 'E82 E4'
+igw.loc[igw['Name'].str.contains('Pretul'), 'Betreiber1'] = 'Österreichische Bundesforste'
+
+igw.loc[igw['Nabenhöhe'] == '', 'Nabenhöhe'] = np.nan
+igw['Nabenhöhe'] = igw['Nabenhöhe'].astype('float')
+
+igw.loc[igw['Rotordurchmesser'] == '', 'Rotordurchmesser'] = np.nan
+igw['Rotordurchmesser'] = igw['Rotordurchmesser'].astype('float')
+
+igw.to_csv(ROOTDIR / 'data/AT_turbines/igwturbines.csv', sep=';', decimal=',', encoding='utf8')
+tmod = igw[['Hersteller', 'Type']].drop_duplicates().sort_values(['Hersteller', 'Type'])
