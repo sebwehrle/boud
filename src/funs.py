@@ -1,11 +1,13 @@
 # %% imports
 import os
+import sys
 import numpy as np
 import pandas as pd
 import xarray as xr
 import geopandas as gpd
 import itertools
 import subprocess
+import statsmodels.api as smf
 from operator import itemgetter
 from scipy.spatial import KDTree
 from shapely.ops import substring
@@ -66,8 +68,13 @@ def turbine_overnight_cost(power, hub_height, rotor_diameter, year):
     return cost.astype('float')
 
 
-def grid_invest_cost(distance):
-    cost = 900 * distance + 12500
+def grid_connect_cost(power):
+    """
+    Calculates grid connection cost according to §54 (3,4) ElWOG https://www.ris.bka.gv.at/GeltendeFassung.wxe?Abfrage=Bundesnormen&Gesetzesnummer=20007045
+    :param power: power in kW
+    :return:
+    """
+    cost = 50 * power
     return cost
 
 
@@ -223,3 +230,82 @@ def locations_to_gdf(lcoe_array, locations, energy_array=None, power_array=None)
     lcoe_gdf = lcoe_gdf.sort_values(by='LCOE')
     lcoe_gdf.reset_index(inplace=True, drop=True)
     return lcoe_gdf
+
+
+def array_clip(data_array, gdf):
+    clipped = data_array.rio.clip(gdf.geometry, gdf.crs, drop=True, invert=False, all_touched=True)
+    if '_FillValue' in data_array.attrs:
+        clipped = clipped.where(clipped != clipped._FillValue)
+    return clipped
+
+
+def concat_to_pandas(dataarray_list, digits):
+    """
+    converts list of named xr.DataArrays to a pd.DataFrame
+    :param dataarray_list: list of named xr.DataArrays. If not named, set name with dataarray.name = 'name'
+    :return: pandas DataFrame
+    """
+    raw_df_list = []
+    for i in dataarray_list:
+        tmp = i.to_dataframe().dropna()
+        ix0 = np.round(tmp.index.get_level_values(0), digits)
+        ix1 = np.round(tmp.index.get_level_values(1), digits)
+        tmp.index = pd.MultiIndex.from_arrays([ix0, ix1])
+        raw_df_list.append(tmp)
+    df_list = [j.drop(['band', 'spatial_ref', 'turbine_models'], axis=1) for j in raw_df_list]
+    df = pd.concat(df_list, axis=1)
+    return df
+
+
+def clip_raster2shapefile(rasterarray, clipshape, dummyshape=None, crs=None, name=None, all_touched=False):
+    """
+    Clips an xarray DataArray to a geopandas GeoDataFrame with Polygons. If dummyshape is a GeoDataFrame with Polygons,
+    raster cells inside the polygons are set to 1 while raster cells outside are set to 0.
+    :param rasterarray: an xarray DataArray
+    :param clipshape: a GeoDataFrame with Polygon-geometries to which the rasterarray is clipped
+    :param dummyshape: a GeoDataFrame with Polygon geometries. Raster cells inside these Polygons are set to 1
+    :param crs: a coordinate reference system
+    :param all_touched: option from rioxarray clip()-function. If all_touched is True, all raster cells touched by
+    Polygon are affected. Otherwise, only raster cells where center point is inside GeoDataFrame-polygons
+    :return: an xarray DataArray
+    """
+    if crs is None:
+        crs = clipshape.crs
+    else:
+        clipshape = clipshape.to_crs(crs)
+
+    rasterarray = rasterarray.rio.reproject(crs)
+
+    if dummyshape is not None:
+        dummyshape = dummyshape.to_crs(crs)
+        # for dummy, set all values in rastertemplate to 0
+        rasterarray.data[~np.isnan(rasterarray.data)] = 0
+        # for dummy, set all raster cells in shapefile to 1
+        rasterarray = rasterarray.where(rasterarray.rio.clip(dummyshape.geometry.values, crs, drop=False,
+                                                             all_touched=all_touched), 1)
+    # clip raster to clipshape
+    rasterclip = rasterarray.rio.clip(clipshape.geometry.values, crs, drop=True, all_touched=all_touched)
+    rasterclip = rasterclip.squeeze()
+    if name is not None:
+        rasterclip.name = name
+    return rasterclip
+
+
+def outside(points, polygons, criterion, splitter):
+    """
+    returns points outside of polygons.
+    Uses column 'criterion' to split up dataset according to df[criterion] == splitter
+    :param points: GeoDataFrame
+    :param polygons: GeoDataFrame
+    :param criterion: string:: Column name
+    :param splitter: string:: element of df[criterion]
+    :return:
+    """
+    b = points.loc[points[criterion] == splitter, :]
+    s = polygons.loc[polygons[criterion] == splitter, :]
+    b = b.drop(['index_right'], axis=1)
+    s = s.drop(['index_right'], axis=1)
+    remo_builds = gpd.sjoin(b, s, predicate='within', how='left')
+    remo_builds = remo_builds.loc[remo_builds['index_right'].isna(), :]
+    return remo_builds
+

@@ -10,15 +10,22 @@ from scipy.interpolate import interp1d
 
 
 # %% functions
-def download_file(url, save_to):
+def download_file(url, save_to, proxy=None, proxy_user=None, proxy_pass=None):
     """
     downloads a file from a specified url to disk
+    :param proxy_pass: proxy password
+    :param proxy_user: proxy user name
+    :param proxy: proxy url:port
     :param url: url-string
     :param save_to: destination file name (string)
     :return:
     """
-    http = urllib3.PoolManager(ca_certs=certifi.where())
-    with http.request('GET', url, preload_content=False) as r, open(save_to, 'wb') as out_file:
+    if proxy is not None:
+        default_headers = urllib3.make_headers(proxy_basic_auth=f'{proxy_user}:{proxy_pass}')
+        http = urllib3.ProxyManager(proxy, proxy_headers=default_headers, ca_certs=certifi.where())
+    else:
+        http = urllib3.PoolManager(ca_certs=certifi.where())
+    with http.request('GET', url.replace('"', '').replace(' ', ''), preload_content=False) as r, open(save_to, 'wb') as out_file:
         shutil.copyfileobj(r, out_file)
 
 
@@ -41,3 +48,4 @@ def process_power_curves(turbines, renewables_ninja_curves, open_energy_curves):
         else:
             missing_turbs.append(turbine)
     powercurves.index.name = 'speed'
+    return powercurves

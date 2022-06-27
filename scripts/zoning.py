@@ -5,7 +5,7 @@ import xarray as xr
 import gamstransfer as gt
 import geopandas as gpd
 from config import ROOTDIR
-from src.funs import sliced_location_optimization, locations_to_gdf
+from src.funs import sliced_location_optimization, locations_to_gdf, array_clip
 
 import matplotlib.pyplot as plt
 
@@ -16,14 +16,6 @@ gams_dict = {
     'gdx_output': ROOTDIR / 'opt',
     'gams_exe': Path('c:/myprogs/gams/37')
 }
-
-# %% define functions
-def array_clip(data_array, gdf):
-    clipped = data_array.rio.clip(gdf.geometry, gdf.crs, drop=True, invert=False, all_touched=True)
-    if '_FillValue' in data_array.attrs:
-        clipped = clipped.where(clipped != clipped._FillValue)
-    return clipped
-
 
 # %% read data
 # read state borders
