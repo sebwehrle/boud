@@ -51,8 +51,10 @@ optCR = 0.01,
 BRatio = 1
 ;
 
+*memoryemphasis 1
 $onecho > cplex.opt
-memoryemphasis 1
+lpmethod 4
+fraccuts=-1
 solvefinal 0
 names no
 $offecho

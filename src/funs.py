@@ -180,6 +180,11 @@ def sliced_location_optimization(gams_dict, gams_transfer_container, lcoe_array,
         else:
             lcoe_map = lcoe_df.iloc[j:i, :]
 
+        if num_turbines == 'auto':
+            nturb = np.ceil((lcoe_map < 85).sum().sum() / 1000) * 1000
+        else:
+            nturb = num_turbines
+
         gdx_out = gams_dict['gdx_output'] / f'locations_{gdx_out_string}_{n}.gdx'
         if not read_only:
             gams_transfer_container.removeSymbols(['l', 'b', 'i', 'j', 'lcoe', 'num_turbines'])
@@ -189,7 +194,7 @@ def sliced_location_optimization(gams_dict, gams_transfer_container, lcoe_array,
             abstd_b = gams_transfer_container.addSet('j', records=list(range(0, space_px)), description='abstand in  breite')
             gams_transfer_container.addParameter('lcoe', domain=[laenge, breite],
                                                                   records=lcoe_map.stack().reset_index())
-            gams_transfer_container.addParameter('num_turbines', domain=[], records=num_turbines)
+            gams_transfer_container.addParameter('num_turbines', domain=[], records=nturb)
             gams_transfer_container.write(str(gams_dict['gdx_input']))
             # run optimization
             gms_exe_dir = gams_dict['gams_exe']
@@ -239,7 +244,7 @@ def array_clip(data_array, gdf):
     return clipped
 
 
-def concat_to_pandas(dataarray_list, digits):
+def concat_to_pandas(dataarray_list, digits=4, drop_labels=None):
     """
     converts list of named xr.DataArrays to a pd.DataFrame
     :param dataarray_list: list of named xr.DataArrays. If not named, set name with dataarray.name = 'name'
@@ -252,7 +257,12 @@ def concat_to_pandas(dataarray_list, digits):
         ix1 = np.round(tmp.index.get_level_values(1), digits)
         tmp.index = pd.MultiIndex.from_arrays([ix0, ix1])
         raw_df_list.append(tmp)
-    df_list = [j.drop(['band', 'spatial_ref', 'turbine_models'], axis=1) for j in raw_df_list]
+
+    if drop_labels is not None:
+        df_list = [j.drop(drop_labels, axis=1) for j in raw_df_list]
+    else:
+        df_list = raw_df_list
+
     df = pd.concat(df_list, axis=1)
     return df
 
@@ -309,3 +319,40 @@ def outside(points, polygons, criterion, splitter):
     remo_builds = remo_builds.loc[remo_builds['index_right'].isna(), :]
     return remo_builds
 
+
+def calculate_distance(data_array, geo_data_frame, cols=[], crs='epsg:3416', digits=4):
+    """
+    Calculates nearest distance from each grid cell center in data_array to each geometry in geo_data_frame.
+    :param digits: number of digits to round coordinates to
+    :param data_array: an xarray DataArray with (x,y)-coordinate index
+    :param geo_data_frame: a GeoDataFrame with the geometries to calculate distances
+    :param cols: see kdnearest()-function
+    :param crs: a coordinate reference system in which distances are calculate. Should be in meters.
+    :return: an xarray DataArray with distances
+    """
+    data_array = data_array.stack(z=('x', 'y'))
+    centers = gpd.GeoDataFrame(geometry=gpd.points_from_xy(data_array[data_array.notnull()].indexes['z'].get_level_values(0),
+                                                           data_array[data_array.notnull()].indexes['z'].get_level_values(1),
+                                                           crs=data_array.rio.crs))
+    centers = centers.to_crs(crs)
+    geo_data_frame = geo_data_frame.to_crs(crs)
+    if any(geo_data_frame.geom_type.str.contains('Polygon')):
+        geo_data_frame = geo_data_frame.boundary.explode()
+        geo_data_frame = geo_data_frame.reset_index(drop=True)
+        geo_data_frame = gpd.GeoDataFrame(geometry=segments(geo_data_frame))
+    distances = kdnearest(centers, geo_data_frame, gdfB_cols=cols)
+
+    distances.index = pd.MultiIndex.from_arrays([distances.geometry.x.round(digits), distances.geometry.y.round(digits)])
+    # get x,y-multiindex from data array
+    dadf = pd.MultiIndex.from_arrays([data_array.coords.indexes['z'].get_level_values(0).values.round(digits),
+                                      data_array.coords.indexes['z'].get_level_values(1).values.round(digits)])
+    dadf = pd.DataFrame(np.nan, dadf, ['dist'])
+    # broadcast values from distance-dataframe to data array-indexed dataframe
+    dadf.loc[distances.index, 'dist'] = distances['dist']
+    # assign values from data array-data frame to actual, stacked data array
+    data_array.values = dadf['dist'].values
+    # unstack data array
+    data_array = data_array.unstack()
+    data_array = data_array.T
+    data_array.name = 'distance'
+    return data_array

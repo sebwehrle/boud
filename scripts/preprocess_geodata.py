@@ -3,18 +3,19 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 import xarray as xr
+from xrspatial import proximity
 import multiprocessing as mp
 import matplotlib.pyplot as plt
 
+from shapely import wkt
 from config import ROOTDIR, country
-from src.funs import clip_raster2shapefile, concat_to_pandas, outside
-from scripts.distances import calculate_distance
+from src.funs import clip_raster2shapefile, concat_to_pandas, outside, splitlines, calculate_distance
 
 from datetime import datetime
 
 # %% settings
 BL = 'Steiermark'
-touch = True
+touch = False
 
 zones = {
     'Niederösterreich': ROOTDIR / 'data/zones/Zonierung_noe.shp',
@@ -27,6 +28,7 @@ buffers = {
     'settlements': 1000,
     'greenland': None,
 }
+
 
 # %% functions
 def wdpa_categories(wdpa, iucn_cats, wdpa_subcats):
@@ -61,12 +63,19 @@ austria = gpd.read_file(ROOTDIR / 'data/vgd/vgd_oesterreich.shp')
 austria = austria[['BL', 'geometry']].dissolve(by='BL')
 austria.reset_index(inplace=True)
 
-xatp = xr.open_dataarray(ROOTDIR / f'data/results/lcoe_{country}.nc')
-xatp = xatp.rio.reproject(austria.crs)
+lcoe = xr.open_dataarray(ROOTDIR / f'data/results/lcoe_{country}.nc')
+lcoe = lcoe.rio.reproject(austria.crs)
+lcoe_austria = lcoe.rio.clip(austria.geometry.values, austria.crs, all_touched=touch)
+lcoe_austria = lcoe_austria.squeeze()
+lcoe_austria.name = 'lcoe'
 
-xatp_austria = xatp.rio.clip(austria.geometry.values, austria.crs)
-xatp_austria = xatp_austria.squeeze()
-xatp_austria.name = 'lcoe'
+gen = xr.open_dataarray(ROOTDIR / f'data/preprocessed/capacity_factors_{country}.nc')
+gen = gen.rio.reproject(austria.crs)
+gen = gen.interp_like(lcoe)
+gen = gen * 8760 * 0.85 * 3.05  # expected annual generation for a 3.05 MW wind turbine
+gen_austria = gen.rio.clip(austria.geometry.values, austria.crs, all_touched=touch)
+gen_austria = gen_austria.squeeze()
+gen_austria.name = 'generation'
 
 # %% wind power zoning
 zoning = []
@@ -81,19 +90,16 @@ for BL in zones.keys():
 zoning = pd.concat(zoning)
 zoning.reset_index(inplace=True)
 
-zoning_austria = clip_raster2shapefile(xatp_austria, austria, dummyshape=zoning, crs=austria.crs,
+zoning_austria = clip_raster2shapefile(lcoe_austria, austria, dummyshape=zoning, crs=austria.crs,
                                        name='zoning', all_touched=touch)
 # TODO: ShapeSkipWarning: Invalid or empty shape None at index 635 will not be rasterized. Projections correct? --> Burgenland!
-# zone_bundesland = xatp_austria.copy()
-# zone_bundesland.data[~np.isnan(zone_bundesland.data)] = 0
-# zone_bundesland = zone_bundesland.where(zone_bundesland.rio.clip(zone.geometry.values, zone.crs, drop=False), 1)
-# zone_bundesland.name = 'zoning'
+zoning_austria = zoning_austria.interp_like(lcoe_austria)
 
 # %% protected areas
 wdpa = combine_shapefiles(ROOTDIR / 'data/schutzgebiete', 'WDPA_WDOECM_Jun2022_Public_AUT_shp-polygons', [1, 2, 3])
-protected_areas_austria = clip_raster2shapefile(xatp_austria, austria, dummyshape=wdpa, crs=austria.crs,
+protected_areas_austria = clip_raster2shapefile(lcoe_austria, austria, dummyshape=wdpa, crs=austria.crs,
                                                 name='protected_areas', all_touched=touch)
-
+protected_areas_austria = protected_areas_austria.interp_like(lcoe_austria)
 # split up protected areas by IUCN categories:
 # iucn_cats = ['Ia', 'Ib', 'II', 'III', 'IV', 'V', 'VI']
 # wdpa_subcats = ['Birds', 'Habitats', 'Ramsar']
@@ -101,9 +107,9 @@ protected_areas_austria = clip_raster2shapefile(xatp_austria, austria, dummyshap
 
 # %% Important Bird Areas - BirdLife
 iba = gpd.read_file(ROOTDIR / 'data/iba/IBA bounbdaries Austria 6 9 2021.shp')
-iba_austria = clip_raster2shapefile(xatp_austria, austria, dummyshape=iba, crs=austria.crs,
+iba_austria = clip_raster2shapefile(lcoe_austria, austria, dummyshape=iba, crs=austria.crs,
                                     name='bird_areas', all_touched=touch)
-
+iba_austria = iba_austria.interp_like(lcoe_austria)
 
 # %% Corine Land Cover - settlements and airports
 clc = gpd.read_file(ROOTDIR / 'data/clc/CLC_2018_AT.shp')
@@ -113,9 +119,9 @@ clc = clc.to_crs(austria.crs)
 # airports
 airports = clc[clc['CODE_18'] == 124]
 airports = airports.buffer(buffers['airports'])
-airports_austria = clip_raster2shapefile(xatp_austria, austria, dummyshape=airports, crs=austria.crs,
+airports_austria = clip_raster2shapefile(lcoe_austria, austria, dummyshape=airports, crs=austria.crs,
                                          name='airports', all_touched=touch)
-
+airports_austria = airports_austria.interp_like(lcoe_austria)
 # settlements
 settle = clc.loc[clc['CODE_18'] <= 121, :]
 settlements = gpd.GeoDataFrame()
@@ -123,9 +129,13 @@ for state in austria['BL'].unique():
     settle_inner = gpd.sjoin(settle, austria.loc[austria['BL'] == state, :], predicate='within', how='inner')
     settlements = pd.concat([settlements, settle_inner])
 
+settlements_distance_austria = calculate_distance(lcoe_austria, settlements, crs=austria.crs)
+settlements_distance_austria.name = 'd_settlements'
+
 settlements.geometry = settlements.buffer(buffers['settlements'])
-settlements_austria = clip_raster2shapefile(xatp_austria, austria, dummyshape=settle, crs=austria.crs,
+settlements_austria = clip_raster2shapefile(lcoe_austria, austria, dummyshape=settle, crs=austria.crs,
                                             name='settlements', all_touched=touch)
+settlements_austria = settlements_austria.interp_like(lcoe_austria)
 
 # %% remote buildings
 gwr = pd.read_csv(ROOTDIR / 'data/gwr/ADRESSE.csv', sep=';')
@@ -151,7 +161,7 @@ startTime = datetime.now()
 bds = pd.DataFrame(data={'x': buildings.loc[:, 'geometry'].x, 'y': buildings.loc[:, 'geometry'].y})
 bds = bds.to_xarray()
 # prepare 2-D data array-template with coordinates as data
-building_count = xatp_austria.copy()
+building_count = lcoe_austria.copy()
 building_count.name = 'building_count'
 building_count = building_count.stack(z=('x', 'y'))
 building_count.data = building_count.z.data
@@ -165,10 +175,12 @@ building_count = building_count.stack(z=('x', 'y'))
 building_count.loc[dict(z=num_buildings.building_count)] = num_buildings.data
 building_count = building_count.unstack()
 building_count.data = building_count.data.astype(float)
-building_count = xr.where(xatp_austria.isnull(), xatp_austria, building_count)
+building_count = xr.where(lcoe_austria.isnull(), lcoe_austria, building_count)
 building_count.name = 'building_count'
-building_count = building_count.rio.write_crs(xatp_austria.rio.crs)
+building_count = building_count.rio.write_crs(lcoe_austria.rio.crs)
 print(f'Computation took {datetime.now() - startTime}')
+
+building_count = building_count.interp_like(lcoe_austria)
 
 """
 buildings_by_bundesland = gpd.GeoDataFrame()
@@ -178,75 +190,159 @@ for state in austria['BL'].unique():
 del buildings_within, buildings
 """
 
+# %% proximity to building count
+prox_buildings_austria = proximity(xr.where(building_count > 0, 1, 0), x='x', y='y')
+prox_buildings_austria = xr.where(lcoe_austria.isnull(), np.nan, prox_buildings_austria)
+prox_buildings_austria = prox_buildings_austria.rio.write_crs(lcoe_austria.rio.crs)
+prox_buildings_austria.name = 'proximity_buildings'
+
+prox_buildings_austria = prox_buildings_austria.interp_like(lcoe_austria)
+
 # %% exclude buildings in settlements
 startTime = datetime.now()
 
 with mp.Pool(np.min([9, mp.cpu_count() - 2])) as pool:
-    remotes = pool.starmap(outside, [[buildings_by_bundesland, settlements, 'BL', land] for land in austria['BL'].unique()])
+    remotes = pool.starmap(outside,
+                           [[buildings_by_bundesland, settlements, 'BL', land] for land in austria['BL'].unique()])
 buildings_remote = pd.concat(remotes)
 del remotes
 
-# TODO: Broken with "austria"
 if buffers['greenland'] is not None:
     buildings_remote.geometry = buildings_remote.buffer(buffers['greenland'])
 
-remote_buildings_austria = clip_raster2shapefile(xatp_austria, austria, dummyshape=buildings_remote, crs=austria.crs,
+remote_buildings_austria = clip_raster2shapefile(lcoe_austria, austria, dummyshape=buildings_remote, crs=austria.crs,
                                                  name='remote_buildings', all_touched=touch)
 print(f'Computation took {datetime.now() - startTime}')
+remote_buildings_austria = remote_buildings_austria.interp_like(lcoe_austria)
+
+remote_buildings_distance_austria = calculate_distance(lcoe_austria, buildings_remote, crs=austria.crs)
+remote_buildings_distance_austria.name = 'd_remote'
+remote_buildings_distance_austria = remote_buildings_distance_austria.interp_like(lcoe_austria)
 
 # %% roads
 roads = gpd.read_file(ROOTDIR / 'data/gip/hrng_streets.shp')
-roads_austria = clip_raster2shapefile(xatp_austria, austria, dummyshape=roads, crs=austria.crs,
+roads_austria = clip_raster2shapefile(lcoe_austria, austria, dummyshape=roads, crs=austria.crs,
                                       name='roads', all_touched=touch)
+roads_austria = roads_austria.interp_like(lcoe_austria)
+
+roads_distance_austria = calculate_distance(lcoe_austria, roads, crs=austria.crs)
+roads_distance_austria.name = 'd_roads'
+roads_distance_austria = roads_distance_austria.interp_like(lcoe_austria)
 
 # %% water bodies
 waters = pd.concat([gpd.read_file(ROOTDIR / 'data/water_bodies/main_standing_waters.shp'),
                     gpd.read_file(ROOTDIR / 'data/water_bodies/main_running_waters.shp')])
-waters_austria = clip_raster2shapefile(xatp_austria, austria, dummyshape=waters, crs=austria.crs,
+waters_austria = clip_raster2shapefile(lcoe_austria, austria, dummyshape=waters, crs=austria.crs,
                                        name='waters', all_touched=touch)
+waters_austria = waters_austria.interp_like(lcoe_austria)
+
+waters_distance_austria = calculate_distance(lcoe_austria, waters, crs=austria.crs)
+waters_distance_austria.name = 'd_waters'
+waters_distance_austria = waters_distance_austria.interp_like(lcoe_austria)
+
+# %% distance to high-voltage grid
+lines = pd.read_csv(ROOTDIR / 'data/grid/gridkit_europe-highvoltage-links.csv')
+lines['geometry'] = lines['wkt_srid_4326'].str.replace('SRID=4326;', '')
+lines['geometry'] = lines['geometry'].apply(wkt.loads)
+lines = gpd.GeoDataFrame(lines, crs='epsg:4326')
+lines = lines.to_crs(austria.crs)
+lines = gpd.clip(lines, austria)
+lines = lines.explode()
+lines = splitlines(lines, 64)
+lines.crs = austria.crs
+
+dist = calculate_distance(lcoe_austria, lines, crs=austria.crs)
+dist = dist.interp_like(lcoe_austria)
+dist.name = 'd_grid'
+
 
 # %% terrain slope
 slope = xr.open_dataarray(ROOTDIR / 'data/elevation/slope_31287.nc')
 slope = slope.squeeze()
 slope = slope.rio.reproject(austria.crs)
-slope_austria = slope.rio.clip(austria.geometry.values, austria.crs)
-slope_austria = slope_austria.interp_like(xatp_austria)
+slope_austria = slope.rio.clip(austria.geometry.values, austria.crs, all_touched=touch)
+slope_austria = slope_austria.interp_like(lcoe_austria)
 slope_austria.name = 'slope'
+slope_austria = slope_austria.interp_like(lcoe_austria)
 
 # %% tidy vars for all of Austria
-var_list = [zoning_austria, xatp_austria, settlements_austria, airports_austria, building_count,
-            remote_buildings_austria, roads_austria, waters_austria, protected_areas_austria, iba_austria,
-            slope_austria]
-tidyvars_austria = concat_to_pandas(var_list, digits=4)
+var_list = [zoning_austria, lcoe_austria, gen_austria, settlements_austria, settlements_distance_austria,
+            airports_austria, building_count, prox_buildings_austria, remote_buildings_austria,
+            remote_buildings_distance_austria, roads_austria, roads_distance_austria, waters_austria,
+            waters_distance_austria, protected_areas_austria, iba_austria, slope_austria, dist]
+tidyvars_austria = concat_to_pandas(var_list, digits=4, drop_labels=['band', 'spatial_ref', 'turbine_models'])
 tidyvars_austria = tidyvars_austria.dropna(how='any', axis=0)
-tidyvars_austria.to_csv(ROOTDIR / 'data/vars_austria.csv')
+tidyvars_austria.to_csv(ROOTDIR / 'data/vars_austria_notouch.csv')
 
 # %% tidy vars for Bundesländer
 for BL in zones.keys():
     bundesland = austria.loc[austria['BL'] == BL, :]
     zone_bundesland = zoning_austria.rio.clip(bundesland.geometry, bundesland.crs)
-    xatp_bundesland = xatp_austria.rio.clip(bundesland.geometry, bundesland.crs)
+    xatp_bundesland = lcoe_austria.rio.clip(bundesland.geometry, bundesland.crs)
+    gen_bundesland = gen_austria.rio.clip(bundesland.geometry, bundesland.crs)
     settlements_bundesland = settlements_austria.rio.clip(bundesland.geometry, bundesland.crs)
+    settlements_distance_bundesland = settlements_distance_austria.rio.clip(bundesland.geometry, bundesland.crs)
     airports_bundesland = airports_austria.rio.clip(bundesland.geometry, bundesland.crs)
     building_count_bundesland = building_count.rio.clip(bundesland.geometry, bundesland.crs)
-    remote_buildings_bundesland =remote_buildings_austria.rio.clip(bundesland.geometry, bundesland.crs)
+    prox_buildings_bundesland = prox_buildings_austria.rio.clip(bundesland.geometry, bundesland.crs)
+    remote_buildings_bundesland = remote_buildings_austria.rio.clip(bundesland.geometry, bundesland.crs)
+    remote_buildings_distance_bundesland = remote_buildings_distance_austria.rio.clip(bundesland.geometry, bundesland.crs)
     roads_bundesland = roads_austria.rio.clip(bundesland.geometry, bundesland.crs)
+    roads_distance_bundesland = roads_distance_austria.rio.clip(bundesland.geometry, bundesland.crs)
     waters_bundesland = waters_austria.rio.clip(bundesland.geometry, bundesland.crs)
+    waters_distance_bundesland = waters_distance_austria.rio.clip(bundesland.geometry, bundesland.crs)
     protected_areas_bundesland = protected_areas_austria.rio.clip(bundesland.geometry, bundesland.crs)
     iba_bundesland = iba_austria.rio.clip(bundesland.geometry, bundesland.crs)
     slope_bundesland = slope_austria.rio.clip(bundesland.geometry, bundesland.crs)
 
-    vars_bundesland = [zone_bundesland, xatp_bundesland, settlements_bundesland, airports_bundesland,
-                       building_count_bundesland, remote_buildings_bundesland, roads_bundesland, waters_bundesland,
+    vars_bundesland = [zone_bundesland, xatp_bundesland, gen_bundesland, settlements_bundesland,
+                       settlements_distance_bundesland, airports_bundesland, building_count_bundesland,
+                       prox_buildings_bundesland, remote_buildings_bundesland, remote_buildings_distance_bundesland,
+                       roads_bundesland, roads_distance_bundesland, waters_bundesland, waters_distance_bundesland,
                        protected_areas_bundesland, iba_bundesland, slope_bundesland]
-    tidyvars_bundesland = concat_to_pandas(vars_bundesland, digits=4)
+    tidyvars_bundesland = concat_to_pandas(vars_bundesland, digits=4,
+                                           drop_labels=['band', 'spatial_ref', 'turbine_models'])
     tidyvars_bundesland = tidyvars_bundesland.dropna(how='any', axis=0)
-# TODO: Replace Umlauts in filename
-    tidyvars_bundesland.to_csv(ROOTDIR / f'data/vars_{BL}.csv')
+    tidyvars_bundesland.to_csv(ROOTDIR / f'data/vars_{BL}_notouch.csv'.replace('ö', 'oe'))
 
-# unique attribution of buildings
-# tidyvars.loc[tidyvars['settlements'] == 1, 'remote_buildings'] = 0
-# unique attribute of roads - overland/non-urban-roads only
-# tidyvars.loc[tidyvars['settlements'] == 1, 'roads'] = 0
+# %% unique attributions
+import pandas as pd
+import rioxarray
+import geopandas as gpd
+import matplotlib.pyplot as plt
+from config import ROOTDIR
+from src.funs import concat_to_pandas
 
-# settlements, airports,
+tidyvars_auq = pd.read_csv(ROOTDIR / 'data/vars_austria.csv')
+# no remote buildings in settlements
+tidyvars_auq.loc[tidyvars_auq['settlements'] == 1, 'remote_buildings'] = 0
+# distance to settlement = 0 in settlements
+tidyvars_auq.loc[tidyvars_auq['settlements'] == 1, 'd_settlements'] = 0
+# no roads in settlements
+tidyvars_auq.loc[tidyvars_auq['settlements'] == 1, 'roads'] = 0
+# no important bird areas in protected areas
+tidyvars_auq.loc[tidyvars_auq['protected_areas'] == 1, 'bird_areas'] = 0
+# distance to remote buildings = 0 in remote_buildings
+tidyvars_auq.loc[tidyvars_auq['remote_buildings'] == 1, 'd_remote'] = 0
+# distance to waters = 0 in waters
+tidyvars_auq.loc[tidyvars_auq['waters'] == 1, 'd_waters'] = 0
+
+# write to disk
+tidyvars_auq.to_csv(ROOTDIR / 'data/vars_austria_uniqued.csv')
+
+# %% unique tidyvars for bundesländer
+austria = gpd.read_file(ROOTDIR / 'data/vgd/vgd_oesterreich.shp')
+austria = austria[['BL', 'geometry']].dissolve(by='BL')
+austria.reset_index(inplace=True)
+
+tidyvars_auq.index = pd.MultiIndex.from_arrays([tidyvars_auq['y'], tidyvars_auq['x']])
+tidyvars_auq = tidyvars_auq.drop(['x', 'y'], axis=1)
+tidyxar_auq = tidyvars_auq.to_xarray()
+tidyxar_auq = tidyxar_auq.rio.write_crs(austria.crs)
+
+BL = 'Niederösterreich'
+bundesland = austria.loc[austria['BL'] == BL, :]
+vars_bundesland = [datavar[1].rio.clip(bundesland.geometry, bundesland.crs) for datavar in tidyxar_auq.data_vars.items()]
+vars_bundesland = concat_to_pandas(vars_bundesland, digits=4, drop_labels=['spatial_ref'])
+
+vars_bundesland.to_csv(ROOTDIR / f'data/vars_{BL}_uniqued.csv'.replace('ö', 'oe'))

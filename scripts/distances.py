@@ -6,33 +6,7 @@ import rioxarray as rxr
 from shapely import wkt
 
 from config import ROOTDIR, country
-from src.funs import segments, splitlines, kdnearest
-
-
-# %% calculate distances
-def calculate_distance(data_array, geo_data_frame, cols=[], crs='epsg:3416'):
-    """
-    Calculates nearest distance from each grid cell center in data_array to each geometry in geo_data_frame.
-    :param data_array: an xarray DataArray with (x,y)-coordinate index
-    :param geo_data_frame: a GeoDataFrame with the geometries to calculate distances
-    :param cols: see kdnearest()-function
-    :param crs: a coordinate reference system in which distances are calculate. Should be in meters.
-    :return: an xarray DataArray with distances
-    """
-    data_array = data_array.stack(z=('x', 'y'))
-    centers = gpd.GeoDataFrame(geometry=gpd.points_from_xy(data_array[data_array.notnull()].indexes['z'].get_level_values(0),
-                                                           data_array[data_array.notnull()].indexes['z'].get_level_values(1),
-                                                           crs=data_array.rio.crs))
-    centers = centers.to_crs(crs)
-    geo_data_frame = geo_data_frame.to_crs(crs)
-    distances = kdnearest(centers, geo_data_frame, gdfB_cols=cols)
-    distances.index = pd.MultiIndex.from_arrays([distances.geometry.y, distances.geometry.x])
-    distances = distances['dist']
-    distances = distances.to_xarray()
-    distances = distances.rio.write_crs(crs)
-    # TODO: apply na
-    return distances
-
+from src.funs import segments, splitlines, kdnearest, calculate_distance
 
 # %% read data
 # open file which will hold the distance data
@@ -94,6 +68,21 @@ df['dist'] = dists['dist']
 template_stacked.values = df['dist'].values
 cfu = template_stacked.unstack().transpose()
 cfu = cfu.rio.write_crs(template.rio.crs)
+
+# %% assign values back to DataArray
+# set multiindex to GeoDataFrame
+gmx = pd.MultiIndex.from_arrays([dists['geometry'].x.round(8), dists['geometry'].y.round(8)])
+dists.index = gmx
+
+mix = cf_stacked.coords.indexes['xy']
+mix = pd.MultiIndex.from_arrays([mix.get_level_values(0).values.round(8), mix.get_level_values(1).values.round(8)])
+df = pd.DataFrame(0, mix, ['dist'])
+df['dist'] = dists['dist']
+cf_stacked.values = df['dist'].values
+cfu = cf_stacked.unstack().transpose()
+
+cfu.to_netcdf(path=ROOTDIR / 'data/grid_distance.nc')
+
 
  # %% write results
 cfu.to_netcdf(path=ROOTDIR / f'data/preprocessed/grid_distance_{country}.nc')
